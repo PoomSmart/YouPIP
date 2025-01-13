@@ -46,7 +46,6 @@
 @end
 
 BOOL FromUser = NO;
-BOOL PiPDisabled = NO;
 
 extern BOOL LegacyPiP();
 
@@ -532,20 +531,21 @@ BOOL YTSingleVideo_isLivePlayback_override = NO;
 %end
 
 %hook YTSingleVideoController
-
 - (void)playerStatusDidChange:(YTPlayerStatus *)playerStatus {
     %orig;
-    PiPDisabled = NoMiniPlayerPiP() && playerStatus.visibility == 1;
+    BOOL disablePiP = NoMiniPlayerPiP() && playerStatus.visibility == 1;
+    AVPictureInPictureController *pipController = [[[[self valueForKey:@"_delegate"] valueForKey:@"_playerPIPController"] valueForKey:@"_pipController"] valueForKey:@"_pictureInPictureController"];
+    id pipProxy = [pipController respondsToSelector:@selector(platformAdapter)] ? [[pipController valueForKey:@"_platformAdapter"] valueForKey:@"_pegasusProxy"] : [pipController valueForKey:@"_pictureInPictureProxy"];
+    Ivar pipPossibleIvar = class_getInstanceVariable(object_getClass(pipProxy), "_pictureInPictureShouldStartWhenEnteringBackground");
+    NSUInteger bufSize;
+    if (pipProxy && pipPossibleIvar && NSGetSizeAndAlignment("B", &bufSize, NULL)) {
+        void *buf = calloc(1, bufSize);
+        [@(!disablePiP) getValue:buf];
+        void *ptr = (__bridge void *)pipProxy + ivar_getOffset(pipPossibleIvar);
+        memcpy(ptr, buf, bufSize);
+        free(buf);
+    }
 }
-
-%end
-
-%hook AVPictureInPicturePlatformAdapter
-
-- (BOOL)isSystemPictureInPicturePossible {
-    return PiPDisabled ? NO : %orig;
-}
-
 %end
 
 %hook YTIPlayabilityStatus
